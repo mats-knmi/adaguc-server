@@ -33,7 +33,7 @@ class CConvertKNMIH5VolScan {
 private:
   DEF_ERRORFUNCTION();
   static int checkIfIsKNMIH5VolScan(CDFObject *cdfObject, CServerParams *srvParams);
-  static int getCalibrationParameters(CT::string formula, float &factor, float &offset);
+  static int getCalibrationParameters(CT::string formula, double &factor, double &offset);
 
 public:
   static int convertKNMIH5VolScanHeader(CDFObject *cdfObject, CServerParams *srvParams);

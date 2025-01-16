@@ -303,8 +303,7 @@ int CConvertKNMIH5VolScan::convertKNMIH5VolScanHeader(CDFObject *cdfObject, CSer
       ((unsigned int *)varScan->data)[i] = sorted_scans[i];
     }
   }
-  // CDFHDF5Reader::CustomVolScanReader *volScanReader = new CDFHDF5Reader::CustomVolScanReader();
-  // CDF::Variable::CustomMemoryReader *memoryReader = CDF::Variable::CustomMemoryReaderInstance;
+
   int cnt = -1;
   for (CT::string s : scan_params) {
     cnt++;
@@ -323,7 +322,7 @@ int CConvertKNMIH5VolScan::convertKNMIH5VolScanHeader(CDFObject *cdfObject, CSer
       if (dataZv == NULL || dataZ == NULL) continue;
     }
     CDF::Variable *var = new CDF::Variable();
-    var->setType(CDF_FLOAT);
+    var->setType(CDF_DOUBLE);
     var->name.copy(s);
     cdfObject->addVariable(var);
     var->setAttributeText("standard_name", s.c_str());
@@ -332,9 +331,8 @@ int CConvertKNMIH5VolScan::convertKNMIH5VolScanHeader(CDFObject *cdfObject, CSer
     var->setAttributeText("ADAGUC_VOL_SCAN", "TRUE");
     var->setAttributeText("ADAGUC_VECTOR", "true"); /* Set this to true to tell adagucserverEC/CImageDataWriter.cpp, 708 to use full screenspace to retrieve GetFeatureInfo value */
     var->setAttributeText("units", units[cnt].c_str());
-    float fillValue = FLT_MAX;
-    var->setAttribute("_FillValue", CDF_FLOAT, &fillValue, 1);
-    // var->setCustomReader(memoryReader);
+    double fillValue = DBL_MAX;
+    var->setAttribute("_FillValue", CDF_DOUBLE, &fillValue, 1);
 
     var->dimensionlinks.push_back(dimT);
     var->dimensionlinks.push_back(dimElevation);
@@ -345,13 +343,13 @@ int CConvertKNMIH5VolScan::convertKNMIH5VolScanHeader(CDFObject *cdfObject, CSer
   return 0;
 }
 
-int CConvertKNMIH5VolScan::getCalibrationParameters(CT::string formula, float &factor, float &offset) {
+int CConvertKNMIH5VolScan::getCalibrationParameters(CT::string formula, double &factor, double &offset) {
   int rightPartFormulaPos = formula.indexOf("=");
   int multiplicationSignPos = formula.indexOf("*");
   int additionSignPos = formula.indexOf("+");
   if (rightPartFormulaPos != -1 && multiplicationSignPos != -1 && additionSignPos != -1) {
-    factor = formula.substring(rightPartFormulaPos + 1, multiplicationSignPos).trim().toFloat();
-    offset = formula.substring(additionSignPos + 1, formula.length()).trim().toFloat();
+    factor = formula.substring(rightPartFormulaPos + 1, multiplicationSignPos).trim().toDouble();
+    offset = formula.substring(additionSignPos + 1, formula.length()).trim().toDouble();
     return 0;
   }
   CDBDebug("Using default factor/offset from %s", formula.c_str());
@@ -478,17 +476,6 @@ int CConvertKNMIH5VolScan::convertKNMIH5VolScanData(CDataSource *dataSource, int
 
     CDF::allocateData(new2DVar->getType(), &(new2DVar->data), fieldSize);
     // Draw data!
-    if (dataObjects[0]->hasNodataValue) {
-      float *fp = ((float *)dataObjects[0]->cdfVariable->data);
-      for (size_t j = 0; j < fieldSize; j++) {
-        *fp++ = (float)dataObjects[0]->dfNodataValue;
-      }
-    } else {
-      float *fp = ((float *)dataObjects[0]->cdfVariable->data);
-      for (size_t j = 0; j < fieldSize; j++) {
-        *fp++ = NAN;
-      }
-    }
 
     float radarLonLat[2];
     cdfObject->getVariable("radar1")->getAttribute("radar_location")->getData<float>(radarLonLat, 2);
@@ -498,19 +485,19 @@ int CConvertKNMIH5VolScan::convertKNMIH5VolScanData(CDataSource *dataSource, int
     CT::string scanName;
     scanName.print("scan%1d", scan);
     scanVar = cdfObject->getVariable(scanName);
-    float scan_elevation;
-    scanVar->getAttribute("scan_elevation")->getData<float>(&scan_elevation, 1);
+    double scan_elevation;
+    scanVar->getAttribute("scan_elevation")->getData<double>(&scan_elevation, 1);
     int scan_nrang;
     scanVar->getAttribute("scan_number_range")->getData<int>(&scan_nrang, 1);
     int scan_nazim;
     scanVar->getAttribute("scan_number_azim")->getData<int>(&scan_nazim, 1);
-    float scan_rscale;
-    scanVar->getAttribute("scan_range_bin")->getData<float>(&scan_rscale, 1);
-    float scan_ascale;
-    scanVar->getAttribute("scan_azim_bin")->getData<float>(&scan_ascale, 1);
+    double scan_rscale;
+    scanVar->getAttribute("scan_range_bin")->getData<double>(&scan_rscale, 1);
+    double scan_ascale;
+    scanVar->getAttribute("scan_azim_bin")->getData<double>(&scan_ascale, 1);
 
-    float factor = 1, offset = 0;
-    float zv_factor, zv_offset;
+    double factor = 1, offset = 0;
+    double zv_factor, zv_offset;
     CT::string scanDataVarName;
     CDF::Variable *scanDataVar;
     CDF::Variable *scanDataVar_Zv;
@@ -559,13 +546,13 @@ int CConvertKNMIH5VolScan::convertKNMIH5VolScanData(CDataSource *dataSource, int
     CImageWarper radarProj;
     radarProj.initreproj(scanProj4.c_str(), dataSource->srvParams->Geo, &dataSource->srvParams->cfg->Projection);
 
-    double x, y, ground_range;
-    float range, azim, ground_height;
+    double x, y;
+    double ground_range, range, azim, ground_height;
     int ir, ia;
     double scan_elevation_rad = scan_elevation * M_PI / 180.0;
     double four_thirds_radius = 6371.0 * 4.0 / 3.0;
-    double radar_height = 0.0;          // Radar height is not present in KNMI HDF5 format, but it is in ODIM format so it could be used there.
-    float *p = (float *)new2DVar->data; // ptr to store data
+    double radar_height = 0.0;            // Radar height is not present in KNMI HDF5 format, but it is in ODIM format so it could be used there.
+    double *p = (double *)new2DVar->data; // ptr to store data
     int missingDataInt;
     scanCalibrationVar->getAttribute("calibration_missing_data")->getData<int>(&missingDataInt, 1);
 
@@ -573,8 +560,8 @@ int CConvertKNMIH5VolScan::convertKNMIH5VolScanData(CDataSource *dataSource, int
     unsigned char missingDataChar = (unsigned char)missingDataInt;
     std::vector<unsigned short *> pScans;
     unsigned short missingData = (unsigned short)missingDataInt;
-    std::vector<float> factors = {factor};
-    std::vector<float> offsets = {offset};
+    std::vector<double> factors = {factor};
+    std::vector<double> offsets = {offset};
 
     if (!doHeight) {
       if (scanDataVar->getType() == CDF_UBYTE) {
@@ -592,6 +579,7 @@ int CConvertKNMIH5VolScan::convertKNMIH5VolScanData(CDataSource *dataSource, int
         offsets.push_back(zv_offset);
       }
     }
+    double fillValue = DBL_MAX;
 
     for (int row = 0; row < height; row++) {
       for (int col = 0; col < width; col++) {
@@ -602,7 +590,7 @@ int CConvertKNMIH5VolScan::convertKNMIH5VolScanData(CDataSource *dataSource, int
         /* Formulas below are only valid when (scan_elevation_rad + ground_range / four_thirds_radius) < (M_PI / 2). */
         /* Longest range for DE/BE/NL radars is ~400 km, which is an equivalent ground range, so we cap the ground range. */
         if (ground_range > 1000.0) {
-          *p++ = FLT_MAX;
+          *p++ = fillValue;
           continue;
         }
         ground_height = ((cos(scan_elevation_rad) * (four_thirds_radius + radar_height)) / cos(scan_elevation_rad + (ground_range / four_thirds_radius))) - four_thirds_radius;
@@ -622,12 +610,12 @@ int CConvertKNMIH5VolScan::convertKNMIH5VolScanData(CDataSource *dataSource, int
               vs.push_back(pScanChar[ir + ia * scan_nrang]);
             }
             if (vs[0] == missingDataChar) {
-              *p++ = FLT_MAX;
+              *p++ = fillValue;
               continue;
             }
             if (doZdr) {
               if (vs[1] == missingDataChar) {
-                *p++ = FLT_MAX;
+                *p++ = fillValue;
                 continue;
               }
               *p++ = vs[0] * factors[0] + offsets[0] - (vs[1] * factors[1] + offsets[1]);
@@ -640,12 +628,12 @@ int CConvertKNMIH5VolScan::convertKNMIH5VolScanData(CDataSource *dataSource, int
               vs.push_back(pScan[ir + ia * scan_nrang]);
             }
             if (vs[0] == missingData) {
-              *p++ = FLT_MAX;
+              *p++ = fillValue;
               continue;
             }
             if (doZdr) {
               if (vs[1] == missingData) {
-                *p++ = FLT_MAX;
+                *p++ = fillValue;
                 continue;
               }
               *p++ = vs[0] * factors[0] + offsets[0] - (vs[1] * factors[1] + offsets[1]);
@@ -654,7 +642,7 @@ int CConvertKNMIH5VolScan::convertKNMIH5VolScanData(CDataSource *dataSource, int
             }
           }
         } else {
-          *p++ = FLT_MAX;
+          *p++ = fillValue;
         }
       }
     }

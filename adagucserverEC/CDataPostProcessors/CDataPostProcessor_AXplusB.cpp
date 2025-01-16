@@ -14,15 +14,15 @@ int CDPPAXplusB::execute(CServerConfig::XMLE_DataPostProc *proc, CDataSource *da
   if (isApplicable(proc, dataSource, mode) != CDATAPOSTPROCESSOR_RUNBEFOREREADING) {
     return -1;
   }
-  if (dataSource->formatConverterActive) {
-    /**
-     * See issue https://github.com/KNMI/adaguc-server/issues/155
-     *
-     * Data post processor is meant for grids, not for other types of data like point times series.
-     */
-    CDBError("CDPPAXplusB not possible when a format converter is active.");
-    return -1;
-  }
+  // if (dataSource->formatConverterActive) {
+  //   /**
+  //    * See issue https://github.com/KNMI/adaguc-server/issues/155
+  //    *
+  //    * Data post processor is meant for grids, not for other types of data like point times series.
+  //    */
+  //   CDBError("CDPPAXplusB not possible when a format converter is active.");
+  //   return -1;
+  // }
   // CDBDebug("Applying ax+b");
   for (size_t varNr = 0; varNr < dataSource->getNumDataObjects(); varNr++) {
     dataSource->getDataObject(varNr)->hasScaleOffset = true;
